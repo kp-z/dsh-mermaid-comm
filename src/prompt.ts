@@ -1,6 +1,7 @@
 import type { PromptSection } from '@deepseek-ai/dsh-system-prompt'
 import type { Context } from '@deepseek-ai/cordis'
 import { ALL_DIAGRAM_TYPES } from './config.ts'
+import { MermaidVault } from './vault.ts'
 
 /** 生成「用 Mermaid 交流」的系统提示段文本。 */
 export function buildPromptText(opts: {
@@ -51,5 +52,50 @@ export function registerMermaidPrompt(ctx: Context, opts: {
     name: 'mermaid-comm:guidance',
     order: 150,
     text: buildPromptText(opts),
+  })
+}
+
+/**
+ * 图库（Mermaid Vault）索引注入段（order 160，紧跟 guidance 之后）。
+ * 只注入轻量索引表（主题/类型/版本/更新时间），不注入图内容——
+ * 图内容按需用 mermaid_vault_read 读，控制上下文开销。
+ * 索引为动态函数：每次组装时实时读 vault。
+ */
+export function registerVaultIndexSection(ctx: Context, opts: {
+  vaultDir?: string
+  maxVersions?: number
+  maxFileBytes?: number
+}) {
+  ctx.systemPrompt.section({
+    name: 'mermaid-comm:vault-index',
+    order: 160,
+    text: () => {
+      let entries: ReturnType<MermaidVault['list']> = []
+      let vaultRoot = ''
+      try {
+        const vault = new MermaidVault({
+          workspace: process.cwd(),
+          ...(opts.vaultDir !== undefined ? { vaultDir: opts.vaultDir } : {}),
+          ...(opts.maxVersions !== undefined ? { maxVersions: opts.maxVersions } : {}),
+          ...(opts.maxFileBytes !== undefined ? { maxFileBytes: opts.maxFileBytes } : {}),
+        })
+        entries = vault.list()
+        vaultRoot = vault.root
+      } catch {
+        return ''
+      }
+      if (entries.length === 0) {
+        return '## 图库（Mermaid Vault）\n\n当前 workspace 还没有持久化的图。' +
+          '涉及架构/数据模型/核心流程等长期资产时，用 mermaid_vault_save 保存，' +
+          '后续对话就能基于旧图演进。\n'
+      }
+      const rows = entries.slice(0, 20).map((e) =>
+        `| ${e.name} | ${e.type} | v${e.version} | ${e.updatedAt.slice(0, 10)} | ${e.source} |`,
+      ).join('\n')
+      return `## 图库（Mermaid Vault）——已有 ${entries.length} 张持久化图\n\n` +
+        `画图前先查图库；同主题已在库中时，用 mermaid_vault_read 读历史，` +
+        `基于旧图演进（save 会形成新版本），不要从零重画。\n\n` +
+        `| 主题 | 类型 | 版本 | 更新 | 来源 |\n|---|---|---|---|---|\n${rows}\n`
+    },
   })
 }

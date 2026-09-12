@@ -1,7 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { MermaidCommConfig, type MermaidCommConfig as MermaidCommConfigType } from './config.ts'
-import { registerMermaidPrompt } from './prompt.ts'
+import { registerMermaidPrompt, registerVaultIndexSection } from './prompt.ts'
 import { registerValidateTool } from './tool-validate.ts'
+import { registerVaultTools } from './tool-vault.ts'
 import { registerOutputGate } from './gate.ts'
 
 /** Loader entry id（kebab-case，全局唯一）。 */
@@ -17,7 +18,17 @@ export const inject = ['tools', 'systemPrompt']
  * schema 的 default 只影响设置页/校验，不自动填进 config。
  */
 export function apply(ctx: Context, config: Partial<MermaidCommConfigType> = {}) {
-  const { enabled = true, promptLevel = 'global', diagramTypes = [], validateBeforeRender = true } = config
+  const {
+    enabled = true,
+    promptLevel = 'global',
+    diagramTypes = [],
+    validateBeforeRender = true,
+    vaultEnabled = true,
+    vaultDir = '.dsh/mermaid',
+    maxVersions = 20,
+    injectIndex = true,
+    maxFileBytes = 256 * 1024,
+  } = config
 
   if (!enabled) return
 
@@ -28,6 +39,14 @@ export function apply(ctx: Context, config: Partial<MermaidCommConfigType> = {})
 
   // C. 语法校验工具（L2 真解析器 + 危险字符扫描）
   registerValidateTool(ctx)
+
+  // D. Mermaid Vault：图库持久化 + 版本演进 + 上下文回馈
+  if (vaultEnabled) {
+    registerVaultTools(ctx, { vaultDir, maxVersions, maxFileBytes })
+    if (injectIndex) {
+      registerVaultIndexSection(ctx, { vaultDir, maxVersions, maxFileBytes })
+    }
+  }
 
   // L3. 输出闸：assistant/message 落盘前自动清洗/摘除坏图
   registerOutputGate(ctx)

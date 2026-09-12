@@ -11,6 +11,29 @@
 | **A. 行为引导** | 注入 `systemPrompt.section`：架构、数据流、时序、状态、依赖等开发话题优先用 Mermaid，先图后简短解释。 |
 | **B. 语法校验** | 注册 `mermaid_validate` 工具，先做危险字符扫描，再调用 dsh-mermaid 同版本 `mermaid-runtime` 真解析。 |
 | **C. 输出闸** | 监听 assistant 消息落盘事件；对 Mermaid 围栏自动修复 Unicode 箭头/危险标签，无法确认通过时从可见 surface 摘除坏图。 |
+| **D. 图库（Mermaid Vault）** | 把验证通过的图持久化到 `<workspace>/.dsh/mermaid/`，形成同主题多版本资产：`<name>.mmd`（当前版）+ `<name>.history.md`（演进历史）+ `INDEX.md`。索引注入系统提示，后续对话基于旧图演进而非从零重画。 |
+
+## 图库（Mermaid Vault）——图的持久化与演进
+
+0.2.0 新增。值得长期保留的图——架构、数据模型、核心流程——会保存到图库，形成**同主题版本化系列**：
+
+```
+<workspace>/.dsh/mermaid/
+├── INDEX.md                 # 图库索引（主题/类型/版本/更新时间）
+├── payment-flow.mmd         # 当前活跃版（始终可渲染）
+└── payment-flow.history.md  # v1/v2/... 各版本变更说明
+```
+
+4 个模型可见工具：
+
+- `mermaid_vault_list` — 列出图库索引（可选按类型过滤）
+- `mermaid_vault_read` — 读某主题：当前源码 + 演进历史
+- `mermaid_vault_save` — 保存/更新一张图（强制真解析校验，语法错拒绝保存，图库里永远是能渲染的图）
+- `mermaid_vault_delete` — 删除某主题（主文件 + 历史 + 索引项）
+
+图库索引会注入系统提示（只注入轻量表格，图内容按需用 `mermaid_vault_read` 读取）。当某主题已在库中时，模型被引导先读历史再 `save` 演进（生成 v2/v3/...），而不是从零重画——这样后续对话能看到图的持续变化，并与之前的工作保持一致。
+
+安全边界：主题名 sanitize 为 `[a-zA-Z0-9-_]`（杜绝路径穿越）、写入锁定在 vault 目录内、原子写、大小与版本上限防止无限膨胀。
 
 ## 安装
 

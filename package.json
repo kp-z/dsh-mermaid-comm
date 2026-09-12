@@ -1,6 +1,6 @@
 {
   "name": "dsh-mermaid-comm",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "让 AI 在开发交流中优先用 Mermaid 图表达：全局 prompt 引导 + mermaid_validate 语法校验。渲染交给 dsh-mermaid（MrmoLabs）。",
   "license": "MIT",
   "keywords": [
@@ -40,6 +40,7 @@
     "build": "tsc -p tsconfig.json",
     "prepublishOnly": "pnpm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run build && node --test \"test/*.test.ts\"",
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dsh": {

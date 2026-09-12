@@ -10,6 +10,16 @@ export interface MermaidCommConfig {
   diagramTypes: string[]
   /** 提示模型在输出前用 mermaid_validate 自检。 */
   validateBeforeRender: boolean
+  /** 图库总开关（Mermaid Vault）。 */
+  vaultEnabled: boolean
+  /** 图库目录（相对 workspace 根；默认 .dsh/mermaid）。 */
+  vaultDir: string
+  /** 每主题历史版本保留上限。 */
+  maxVersions: number
+  /** 是否向 system prompt 注入图库索引段。 */
+  injectIndex: boolean
+  /** 单文件大小上限（字节）。 */
+  maxFileBytes: number
 }
 
 /** dsh-mermaid-comm 插件配置 schema（运行时校验 + 默认值）。 */
@@ -22,6 +32,16 @@ export const MermaidCommConfig: z<MermaidCommConfig> = z.object({
   diagramTypes: z.array(z.string()).default([]),
   /** 提示模型在输出前用 mermaid_validate 自检。 */
   validateBeforeRender: z.boolean().default(true),
+  /** 图库总开关（Mermaid Vault）。 */
+  vaultEnabled: z.boolean().default(true),
+  /** 图库目录（相对 workspace 根；默认 .dsh/mermaid）。 */
+  vaultDir: z.string().default('.dsh/mermaid'),
+  /** 每主题历史版本保留上限。 */
+  maxVersions: z.number().default(20),
+  /** 是否向 system prompt 注入图库索引段。 */
+  injectIndex: z.boolean().default(true),
+  /** 单文件大小上限（字节）。 */
+  maxFileBytes: z.number().default(256 * 1024),
 })
 
 /** 兼容别名：从 schema 推导的配置类型（schemastery 无 z.infer，用全局命名空间 TypeT）。 */
