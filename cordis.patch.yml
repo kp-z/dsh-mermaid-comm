@@ -1,0 +1,4 @@
+# 每个 bundle 的 patch：把本插件插进 profile 的层栈。
+- insert:
+    - id: mermaid-comm
+      name: dsh-mermaid-comm
