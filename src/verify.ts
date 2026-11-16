@@ -5,7 +5,10 @@
  * - scanDangerous()：扫描重写后仍可能有的危险字符
  * - loadMermaidRuntime()：懒加载 dsh-mermaid 的 runtime bundle（与浏览器渲染同一份 mermaid），
  *   一参 parse() 对真语法错稳定抛带 .hash 的 SYNTAX-ERR，DOM 噪音错不带 .hash。
+ *   该 runtime 是浏览器打包产物，标签消毒要过 DOMPurify，所以导入前由 dom.ts 临时挂一个 DOM。
  */
+
+import { installDomForImport } from './dom.ts'
 
 interface MermaidRuntime {
   parse(text: string): Promise<unknown>
@@ -19,6 +22,9 @@ const globalForMermaid = globalThis as typeof globalThis & {
 export function loadMermaidRuntime(): Promise<MermaidRuntime | null> {
   if (!globalForMermaid.__dsh_mermaid_comm_runtime) {
     globalForMermaid.__dsh_mermaid_comm_runtime = (async () => {
+      // DOMPurify 在创建时就读取 window/document；只在 import 这段窗口里临时挂上，
+      // 导入完立刻还原，别把假 DOM 留给宿主进程（见 dom.ts）。
+      const restoreDom = await installDomForImport()
       try {
         const { createRequire } = await import('node:module')
         const path = await import('node:path')
@@ -31,6 +37,8 @@ export function loadMermaidRuntime(): Promise<MermaidRuntime | null> {
         return null
       } catch {
         return null
+      } finally {
+        restoreDom?.()
       }
     })()
   }
@@ -92,14 +100,22 @@ export function scanDangerous(code: string): string[] {
   return errors
 }
 
-export function parseCheck(runtime: MermaidRuntime, code: string): Promise<{ ok: boolean; error: string }> {
+export interface ParseCheckResult {
+  ok: boolean
+  error: string
+  /** 真语法错（jison 带 .hash）；false 表示 DOM 噪音之类的非语法失败。 */
+  syntax: boolean
+}
+
+export function parseCheck(runtime: MermaidRuntime, code: string): Promise<ParseCheckResult> {
   return runtime.parse(code).then(
-    () => ({ ok: true, error: '' }),
+    () => ({ ok: true, error: '', syntax: false }),
     (e: unknown) => {
       const message = e instanceof Error ? e.message : String(e)
       return {
         ok: false,
         error: message.split('\n').slice(0, 3).join(' ').slice(0, 200),
+        syntax: isTrueSyntaxError(e),
       }
     },
   )
@@ -148,6 +164,21 @@ export async function verifyMermaid(codeInput: string, requestedType = ''): Prom
 
   const check = await parseCheck(runtime, code)
   if (check.ok) return { ok: true, built: code, fixes, errors, hints, type }
+
+  // 不带 .hash 的失败不是语法错：运行时的标签消毒拿不到 DOM 时就会这样失败
+  // （`Zs.addHook is not a function` 等）。与「无运行时」同一策略——不能声称通过，
+  // 但也不能把它冒充成语法错误，否则带标签的图会被 100% 误判。
+  if (!check.syntax) {
+    hints.push('校验运行时的标签消毒缺少 DOM（或运行时不兼容），该次失败是环境噪音而非语法错；请人工确认该图')
+    return {
+      ok: false,
+      built: code,
+      fixes,
+      errors: [...errors, '未能完成真解析校验：' + check.error],
+      hints,
+      type,
+    }
+  }
 
   return {
     ok: false,
